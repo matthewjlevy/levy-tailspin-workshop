@@ -12,36 +12,153 @@
     {
         <ErrorMessage Message="@errorMessage" />
     }
-    else if (games is null || games.Length == 0)
-    {
-        <EmptyState />
-    }
     else
     {
-        <div data-testid="games-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach (var game in games)
-            {
-                <GameCard Game="game" />
-            }
-        </div>
+        @if (categories.Length > 0 || publishers.Length > 0)
+        {
+            <div data-testid="games-filters" class="mb-6 bg-slate-800/60 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
+                <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 items-end">
+                    <div>
+                        <label for="category-filter" class="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                        <select id="category-filter"
+                                data-testid="category-filter"
+                                value="@(selectedCategoryId?.ToString() ?? string.Empty)"
+                                @onchange="OnCategoryChanged"
+                                class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">All categories</option>
+                            @foreach (var category in categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="publisher-filter" class="block text-sm font-medium text-slate-300 mb-2">Publisher</label>
+                        <select id="publisher-filter"
+                                data-testid="publisher-filter"
+                                value="@(selectedPublisherId?.ToString() ?? string.Empty)"
+                                @onchange="OnPublisherChanged"
+                                class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">All publishers</option>
+                            @foreach (var publisher in publishers)
+                            {
+                                <option value="@publisher.Id">@publisher.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <button type="button"
+                            data-testid="clear-filters-button"
+                            @onclick="ClearFiltersAsync"
+                            disabled="@(!HasActiveFilters)"
+                            class="px-6 py-2 rounded-lg bg-slate-700 text-slate-100 hover:bg-slate-600 transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50">
+                        Clear filters
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (games is null || games.Length == 0)
+        {
+            <EmptyState Message="@(HasActiveFilters ? "No games match the selected filters." : "No games available at the moment.")" />
+        }
+        else
+        {
+            <div data-testid="games-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var game in games)
+                {
+                    <GameCard Game="game" />
+                }
+            </div>
+        }
     }
 </div>
 
 @code {
     private Game[]? games;
+    private Category[] categories = [];
+    private Publisher[] publishers = [];
+    private int? selectedCategoryId;
+    private int? selectedPublisherId;
     private bool isLoading = true;
     private string? errorMessage;
+    private bool HasActiveFilters => selectedCategoryId.HasValue || selectedPublisherId.HasValue;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadInitialDataAsync();
+    }
+
+    private async Task LoadInitialDataAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
         try
         {
             var client = HttpClientFactory.CreateClient("API");
-            var response = await client.GetAsync("api/games");
+            var initialGamesTask = client.GetFromJsonAsync<Game[]>("api/games");
+            var publishersTask = client.GetFromJsonAsync<Publisher[]>("api/publishers");
+
+            await Task.WhenAll(initialGamesTask!, publishersTask!);
+
+            var initialGames = await initialGamesTask ?? [];
+            games = initialGames;
+            publishers = await publishersTask ?? [];
+            categories = initialGames
+                .Where(game => game.Category is not null)
+                .Select(game => game.Category!)
+                .GroupBy(category => category.Id)
+                .Select(group => group.First())
+                .OrderBy(category => category.Name)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            games = [];
+            categories = [];
+            publishers = [];
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnCategoryChanged(ChangeEventArgs args)
+    {
+        selectedCategoryId = ParseNullableInt(args.Value?.ToString());
+        await LoadGamesAsync();
+    }
+
+    private async Task OnPublisherChanged(ChangeEventArgs args)
+    {
+        selectedPublisherId = ParseNullableInt(args.Value?.ToString());
+        await LoadGamesAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        selectedCategoryId = null;
+        selectedPublisherId = null;
+        await LoadGamesAsync();
+    }
+
+    private async Task LoadGamesAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var client = HttpClientFactory.CreateClient("API");
+            var response = await client.GetAsync(BuildGamesRequestUri());
 
             if (response.IsSuccessStatusCode)
             {
-                games = await response.Content.ReadFromJsonAsync<Game[]>();
+                games = await response.Content.ReadFromJsonAsync<Game[]>() ?? [];
             }
             else
             {
@@ -56,5 +173,29 @@
         {
             isLoading = false;
         }
+    }
+
+    private string BuildGamesRequestUri()
+    {
+        var queryParameters = new List<string>();
+
+        if (selectedCategoryId.HasValue)
+        {
+            queryParameters.Add($"categoryId={selectedCategoryId.Value}");
+        }
+
+        if (selectedPublisherId.HasValue)
+        {
+            queryParameters.Add($"publisherId={selectedPublisherId.Value}");
+        }
+
+        return queryParameters.Count == 0
+            ? "api/games"
+            : $"api/games?{string.Join("&", queryParameters)}";
+    }
+
+    private static int? ParseNullableInt(string? value)
+    {
+        return int.TryParse(value, out var parsedValue) ? parsedValue : null;
     }
 }
