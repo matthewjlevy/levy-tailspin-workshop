@@ -36,6 +36,14 @@ A script file has been created to launch the site. You can run it by:
 
 Then navigate to the [website](http://localhost:4321) to see the site!
 
+## API endpoints
+
+The backend exposes a small JSON API for the frontend:
+
+- `GET /api/games` returns all games with their related publisher and category data. It also accepts optional `categoryId` and `publisherId` query parameters for filtering.
+- `GET /api/games/{id}` returns a single game by id.
+- `GET /api/publishers` returns all publishers with their `id` and `name`.
+
 ## License 
 
 This project is licensed under the terms of the MIT open source license. Please refer to the [LICENSE](./LICENSE) for the full terms.

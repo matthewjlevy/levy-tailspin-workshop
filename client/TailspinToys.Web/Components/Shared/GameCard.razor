@@ -2,25 +2,27 @@
    data-testid="game-card"
    data-game-id="@Game.Id"
    data-game-title="@Game.Title"
+   data-game-category="@Game.Category?.Name"
+   data-game-publisher="@Game.Publisher?.Name"
    class="group block bg-slate-800/60 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-slate-700/50 hover:border-blue-500/50 hover:shadow-blue-500/10 hover:shadow-xl transition-all duration-300 hover:translate-y-[-6px] no-underline">
     <div class="p-6 relative">
         <div class="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         <div class="relative z-10">
             <h3 data-testid="game-title" class="text-xl font-semibold text-slate-100 mb-2 group-hover:text-blue-400 transition-colors">@Game.Title</h3>
 
-            @if (!string.IsNullOrWhiteSpace(Game.CategoryName) || !string.IsNullOrWhiteSpace(Game.PublisherName))
+            @if (Game.Category is not null || Game.Publisher is not null)
             {
                 <div class="flex gap-2 mb-3">
-                    @if (!string.IsNullOrWhiteSpace(Game.CategoryName))
+                    @if (Game.Category is not null)
                     {
                         <span class="text-xs font-medium px-2.5 py-0.5 rounded bg-blue-900/60 text-blue-300" data-testid="game-category">
-                            @Game.CategoryName
+                            @Game.Category.Name
                         </span>
                     }
-                    @if (!string.IsNullOrWhiteSpace(Game.PublisherName))
+                    @if (Game.Publisher is not null)
                     {
                         <span class="text-xs font-medium px-2.5 py-0.5 rounded bg-purple-900/60 text-purple-300" data-testid="game-publisher">
-                            @Game.PublisherName
+                            @Game.Publisher.Name
                         </span>
                     }
                 </div>

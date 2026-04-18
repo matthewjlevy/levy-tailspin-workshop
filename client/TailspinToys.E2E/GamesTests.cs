@@ -24,6 +24,94 @@ public class GamesTests : PlaywrightTestBase
     }
 
     [Fact]
+    public async Task ShouldFilterGamesByCategoryAndClearFilters()
+    {
+        await Page.GotoAsync("/");
+        await Expect(Page.GetByTestId("games-grid")).ToBeVisibleAsync();
+
+        var initialGameCount = await Page.GetByTestId("game-card").CountAsync();
+        var firstGameCard = Page.GetByTestId("game-card").First;
+        var categoryName = await firstGameCard.GetAttributeAsync("data-game-category");
+        Assert.False(string.IsNullOrWhiteSpace(categoryName));
+
+        await Page.GetByTestId("category-filter").SelectOptionAsync(new SelectOptionValue
+        {
+            Label = categoryName
+        });
+        await Page.WaitForFunctionAsync(
+            @"expectedCategory => {
+                const cards = [...document.querySelectorAll('[data-testid=""game-card""]')];
+                return cards.length > 0 && cards.every(card => card.getAttribute('data-game-category') === expectedCategory);
+            }",
+            categoryName);
+
+        var filteredGameCards = await Page.QuerySelectorAllAsync("[data-testid='game-card']");
+        Assert.NotEmpty(filteredGameCards);
+
+        var filteredGameCount = filteredGameCards.Count;
+        Assert.True(filteredGameCount > 0);
+        Assert.True(filteredGameCount <= initialGameCount);
+
+        foreach (var card in filteredGameCards)
+        {
+            var gameCategory = await card.GetAttributeAsync("data-game-category");
+            Assert.Equal(categoryName, gameCategory);
+        }
+
+        await Page.GetByTestId("clear-filters-button").ClickAsync();
+        await Page.WaitForFunctionAsync(
+            @"expectedCount => document.querySelectorAll('[data-testid=""game-card""]').length === expectedCount",
+            initialGameCount);
+        await Expect(Page.GetByTestId("games-grid")).ToBeVisibleAsync();
+        Assert.Equal(initialGameCount, await Page.GetByTestId("game-card").CountAsync());
+    }
+
+    [Fact]
+    public async Task ShouldFilterGamesByCategoryAndPublisher()
+    {
+        await Page.GotoAsync("/");
+        await Expect(Page.GetByTestId("games-grid")).ToBeVisibleAsync();
+
+        var firstGameCard = Page.GetByTestId("game-card").First;
+        var categoryName = await firstGameCard.GetAttributeAsync("data-game-category");
+        var publisherName = await firstGameCard.GetAttributeAsync("data-game-publisher");
+
+        Assert.False(string.IsNullOrWhiteSpace(categoryName));
+        Assert.False(string.IsNullOrWhiteSpace(publisherName));
+
+        await Page.GetByTestId("category-filter").SelectOptionAsync(new SelectOptionValue
+        {
+            Label = categoryName
+        });
+        await Page.GetByTestId("publisher-filter").SelectOptionAsync(new SelectOptionValue
+        {
+            Label = publisherName
+        });
+        await Page.WaitForFunctionAsync(
+            @"expectedFilters => {
+                const cards = [...document.querySelectorAll('[data-testid=""game-card""]')];
+                return cards.length > 0 && cards.every(card =>
+                    card.getAttribute('data-game-category') === expectedFilters.category &&
+                    card.getAttribute('data-game-publisher') === expectedFilters.publisher);
+            }",
+            new { category = categoryName, publisher = publisherName });
+
+        var filteredGameCards = await Page.QuerySelectorAllAsync("[data-testid='game-card']");
+        Assert.NotEmpty(filteredGameCards);
+
+        var filteredGameCount = filteredGameCards.Count;
+        Assert.True(filteredGameCount > 0);
+
+        foreach (var card in filteredGameCards)
+        {
+            var gameCategory = await card.GetAttributeAsync("data-game-category");
+            var gamePublisher = await card.GetAttributeAsync("data-game-publisher");
+            Assert.Equal(categoryName, gameCategory);
+            Assert.Equal(publisherName, gamePublisher);
+        }
+    }
+
+    [Fact]
     public async Task ShouldNavigateToCorrectGameDetailsPage()
     {
         // Navigate to homepage and wait for games to load
